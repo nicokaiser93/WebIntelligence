@@ -26,3 +26,12 @@ user example (I am not using user(1) as an example because the first entry belon
         user.id(2) will give you the ID number of the user
         user.articlesRead(2) will give you a list of IDs of all items that have been read by user 2
         user.numOfArticlesRead(2) will give you the number of items the user 2 has read
+        
+        
+What I found out so far:
+
+- 2626 item IDs 	-> only 69 with info about content
+- 20854 user IDs
+- very few articles that have been read outrageously much -> many articles that have only been read < 5 times
+- average number of articles a user has read: 2.8175
+- average number of users that have read a specific article 21.6181
