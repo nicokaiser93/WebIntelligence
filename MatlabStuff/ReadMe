@@ -1,0 +1,28 @@
+I do not recommend to run the matlab code by yourself because for my PC it took approx. 30 minutes...
+
+I included all information I found out so far in two structs -> item and user
+They look like this:
+
+item = 
+
+              id: [1x2626 double]
+          readBy: {1x2626 cell}
+    numOfReaders: [1x2626 double]
+    
+user = 
+
+                   id: [1x20854 double]
+         articlesRead: {1x20854 cell}
+    numOfArticlesRead: [1x20854 double]
+    
+so for example if you want to have a look at the first item:
+        
+        item.id(1) will give you the ID number,
+        item.readBy(1) will give you a list of IDs from all users that have read item 1
+        item.numOfReaders(1) will give you the number of users that have read item1
+        
+user example (I am not using user(1) as an example because the first entry belongs to all unrecognized users):
+
+        user.id(2) will give you the ID number of the user
+        user.articlesRead(2) will give you a list of IDs of all items that have been read by user 2
+        user.numOfArticlesRead(2) will give you the number of items the user 2 has read
