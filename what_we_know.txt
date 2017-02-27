@@ -38,3 +38,11 @@ content-based: finding similiar (based on title, text, keywords(?)) articles to 
 collaborative: finding users with similiar behavior (who read same article(s)), recommend items they liked (nearest neighbor)
 	- build user-item-matrix
 	- Pearson
+	
+What I found out about the example data so far -> see folder MatlabStuff
+
+- 2626 item IDs 	-> only 69 with info about content
+- 20854 user IDs
+- very few articles that have been read outrageously much -> many articles that have only been read < 5 times
+- average number of articles a user has read: 2.8175
+- average number of users that have read a specific article 21.6181
