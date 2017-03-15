@@ -36,12 +36,11 @@ def stop():
 @app.route('/', methods=['POST'])
 def recommend():
 
-    # Interface with your recommender algorithm and build your response
+    #receiving and extracting  data
     recBody = json.loads(request.form.getlist('body')[0])
     recType = request.form.getlist('type')[0]
-    print(recBody)
 
-    #information of each recommendation request or event notification (they have the same struture)
+    #extract information of each recommendation request or event notification (they have the same struture)
     if (recType!="item_update"):
         try:
             userID = recBody['context']['simple']['57'] #might be 0 as well ;)
@@ -58,7 +57,6 @@ def recommend():
         except:
             publisherID = 0
 
-
         #print(recType+" user:"+str(userID)+" item:"+str(itemID)+" publisher:"+str(publisherID))
         
         #saves for each publisher which user read which articles
@@ -66,15 +64,13 @@ def recommend():
         user_item[publisherID][userID].append(itemID)
         #print(user_item)
 
-    #information of each item_update
+    #extract information of each item_update
     else:
         publisherID = recBody['domainid']
         itemID = recBody['id']
-        #print(recType)
-        #print(recBody)
 
 
-    #counts for each publisher how often item was "touched"
+    #counts for each publisher how often item was "touched" (in event_notification, recommendation_request or item_update)
     item_count.setdefault(publisherID, defaultdict())
     item_count[publisherID].setdefault(itemID,0)
     item_count[publisherID][itemID] = item_count[publisherID][itemID]+1
@@ -84,24 +80,25 @@ def recommend():
 
     #returns sorted list of which items were most often touched
     mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get)
-    #print(item_count[publisherID])
-    #print(mostPopularItem)
 
+    ############################
     #building the rec-response
+    ############################
     resp = {}
-    resp['GT'] = recBody
-    resp['rec'] = []
-    # Each recommendation is a dict item of 'rec' list inside 'resp' dict and it is formed by
-    # {id, rating, rank}. Response *must* follow this structure to be readable by the evaluator
+
     if (recType=="recommendation_request"):
+        resp['recs']={}
+        resp['recs']['ints']={}
+        resp['recs']['ints']['3']=[]
+
         limit = recBody['limit']
         for i in range(limit):
             try:
-                resp['rec'].append({"id": int(mostPopularItems[i]), "rating": float(1), "rank": i})
+                resp['recs']['ints']['3'].append(int(mostPopularItems[i]))
             except:
-                resp['rec'].append({"id": int(0), "rating": float(1), "rank": i})
+                resp['recs']['ints']['3'].append(0)
 
-        print(resp['rec'])
+        print(resp)
 
     return app.make_response(json.dumps(resp))
 
