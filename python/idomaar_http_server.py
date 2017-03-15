@@ -39,38 +39,69 @@ def recommend():
     # Interface with your recommender algorithm and build your response
     recBody = json.loads(request.form.getlist('body')[0])
     recType = request.form.getlist('type')[0]
-    
-    userID = recBody['context']['simple']['57']
-    itemID = recBody['context']['simple']['25'] #might be 0!
-    publisherID = recBody['context']['simple']['27']
-    print(recType+" user:"+str(userID)+" item:"+str(itemID)+" publisher:"+str(publisherID))
+    print(recBody)
 
-    #saves for each publisher which user read what
-    user_item.setdefault(publisherID, defaultdict(list))
-    user_item[publisherID][userID].append(itemID)
-    print(user_item)
+    #information of each recommendation request or event notification (they have the same struture)
+    if (recType!="item_update"):
+        try:
+            userID = recBody['context']['simple']['57'] #might be 0 as well ;)
+        except:
+            userID = 0
+
+        try:
+            itemID = recBody['context']['simple']['25'] #might be 0!
+        except:
+            itemID = 0
+
+        try:
+            publisherID = recBody['context']['simple']['27']
+        except:
+            publisherID = 0
+
+
+        #print(recType+" user:"+str(userID)+" item:"+str(itemID)+" publisher:"+str(publisherID))
+        
+        #saves for each publisher which user read which articles
+        user_item.setdefault(publisherID, defaultdict(list))
+        user_item[publisherID][userID].append(itemID)
+        #print(user_item)
+
+    #information of each item_update
+    else:
+        publisherID = recBody['domainid']
+        itemID = recBody['id']
+        #print(recType)
+        #print(recBody)
+
 
     #counts for each publisher how often item was "touched"
     item_count.setdefault(publisherID, defaultdict())
     item_count[publisherID].setdefault(itemID,0)
     item_count[publisherID][itemID] = item_count[publisherID][itemID]+1
+    
+    #returns most popular item (which was most often "touched")
     mostPopularItem = max(item_count[publisherID], key=item_count[publisherID].get)
-    print(item_count[publisherID])
-    print(mostPopularItem)
 
+    #returns sorted list of which items were most often touched
+    mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get)
+    #print(item_count[publisherID])
+    #print(mostPopularItem)
 
-    # predict_next_items() is a function defined somewhere in this file and contains
-    # instructions to interact with your own algorithm; this is just an example!
-    #algo_resp = predict_next_items(algo_handler, sessionId, prevItemId, 20)
-
+    #building the rec-response
     resp = {}
-    #resp['GT'] = recRequestProperties
-    #resp['rec'] = []
-
+    resp['GT'] = recBody
+    resp['rec'] = []
     # Each recommendation is a dict item of 'rec' list inside 'resp' dict and it is formed by
     # {id, rating, rank}. Response *must* follow this structure to be readable by the evaluator
-    #for i in range(len(algo_resp)):
-    #    resp['rec'].append({"id": int(algo_resp[i][0]), "rating": float(algo_resp[i][1]), "rank": i+1})
+    if (recType=="recommendation_request"):
+        limit = recBody['limit']
+        for i in range(limit):
+            try:
+                resp['rec'].append({"id": int(mostPopularItems[i]), "rating": float(1), "rank": i})
+            except:
+                resp['rec'].append({"id": int(0), "rating": float(1), "rank": i})
+
+        print(resp['rec'])
 
     return app.make_response(json.dumps(resp))
 
