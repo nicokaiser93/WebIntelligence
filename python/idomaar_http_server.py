@@ -5,17 +5,15 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 from collections import defaultdict
-import numpy as np
+
+import user_user_collaborative
+import response_handling
+import item_item_collaborative
 
 app = Flask(__name__)
 user_item = {}
+item_user = {}
 item_count = {}
-itemList = {}
-itemArray = {}
-itemArray_tmp = {}
-userList = {}
-global matrix
-matrix = {}
 
 @app.route('/')
 def index():
@@ -40,36 +38,25 @@ def stop():
     print (user_item)
     return 'OK'
 
-def itemItem(user_item_publisher, userID):
-
-    sim = {}
-    for key in user_item_publisher.keys():
-        if (key == userID) or (key == 0) or (userID == 0):
-            sim[key] = 0
-            continue
-        this_user = user_item_publisher[userID]
-        comp_user = user_item_publisher[key]
-        sim.setdefault(key, 0)
-        for i in this_user:
-            if i in comp_user:
-                sim[key] = sim[key] + 1
-
-    most_similar_user = max(sim, key=sim.get)
-    most_similar_item_list = user_item_publisher[most_similar_user]
-    not_read_list = set(user_item_publisher[userID]) - set(most_similar_item_list)
-    try:
-        return not_read_list[0]
-    except:
-        return 0
 
 @app.route('/', methods=['POST'])
 def recommend():
 
-
+    #TODO ACHTUNG ACHTUNG!! BITTE FOLGENDES BEACHTEN:
+    # habe 3 python files erstellt die am anfang importiert werden und damit etwas ausgelagert und versucht damit den
+    # Überblick zu behalten
+    # response_handling: bekommt alle Ergebnisse und man kann anhand der version entscheiden wie diese zu der resp
+    # kombiniert werden
+    # user_user_collaborative: der Name ist Programm --> gibt maximal 6 Artikel des ähnlichsten Users zurück
+    # item_item_collaborative: der Name ist Programm --> gibt die 6 ähnlichstens Items zurück
 
     #receiving and extracting  data
     recBody = json.loads(request.form.getlist('body')[0])
     recType = request.form.getlist('type')[0]
+
+    # initialization for collaborative filtering
+    user_user_result = [0]
+    item_item_result = [0]
 
     #extract information of each recommendation request or event notification (they have the same struture)
     if (recType!="item_update"):
@@ -88,29 +75,19 @@ def recommend():
         except:
             publisherID = 0
 
-        #print(recType+" user:"+str(userID)+" item:"+str(itemID)+" publisher:"+str(publisherID))
-
         #saves for each publisher which user read which articles
         user_item.setdefault(publisherID, defaultdict(list))
-        #if itemID != 0:
-            #user_item[publisherID][userID].append(itemID)
         user_item[publisherID][userID].append(itemID)
-        #print(user_item)
+
+        # saves for each publisher which item was read by which user
+        item_user.setdefault(publisherID, defaultdict(list))
+        if itemID != 0:
+            item_user[publisherID][itemID].append(userID)
 
     #extract information of each item_update
     else:
         publisherID = recBody['domainid']
         itemID = recBody['id']
-        #userID = recBody['context']['simple']['57']  # might be 0 as well ;)
-
-    if publisherID == 1677:
-        print(publisherID)
-
-    # user 0 hat nur den aktuellen artikel gelesne
-    if userID != 0:
-        most_similar = itemItem(user_item[publisherID], userID)
-    else:
-        most_similar = 0
 
 
     #counts for each publisher how often item was "touched" (in event_notification, recommendation_request or item_update)
@@ -119,44 +96,46 @@ def recommend():
         item_count[publisherID].setdefault(itemID, 0)
         item_count[publisherID][itemID] = item_count[publisherID][itemID]+1
 
-    #returns most popular item (which was most often "touched")
-    mostPopularItem = max(item_count[publisherID], key=item_count[publisherID].get)
-
     #returns sorted list of which items were most often touched
-    mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get)
+    try:
+        mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get)
+    except:
+        mostPopularItems = []
+
 
     ############################
     #building the rec-response
     ############################
-    resp = {}
+
+    ### thoughts: ###
+    # - time-dependant change of the response handling -> for example in the beginning user_user is useless but after
+    #   a lot of requests it could be useful
+    # - base everything on the mostPopularItems and connect the other two methods to a rating
+    #   --> for example an item that is in the top 10 of popularity AND top 6 of similarity could lead to better results
+    #       than an item that is "only" most popular or most similar
+    # - it is maybe not optimal to compute all the results from most_popular, user_user and item_item although we may
+    #   not use all of them in the response handling -> maybe call functions from the response handling
+    # - testing has to done --> by now i have no idea how to combine the results best although item_item seems to have
+    #   the most clicks for the small data set
 
     if (recType=="recommendation_request"):
 
+        # get max 6 items from user_user collaborative filtering
+        # (if userID = 0 he is treated as if he had only read the current item)
+        if not ((userID == 0) and (itemID == 0)):
+            user_user_result = user_user_collaborative.filtering(user_item[publisherID], userID, itemID)
 
-        #TODO erste 1000 übersprigen
+        # get the 6 most similar items
+        if not(itemID == 0):
+            item_item_result = item_item_collaborative.filtering(item_user[publisherID], itemID)
 
-        resp['recs']={}
-        resp['recs']['ints']={}
-        resp['recs']['ints']['3']=[]
-
-        if publisherID == 13554:
-            print(0)
+        # get the limit of how many items to recommend
         limit = recBody['limit']
-        if most_similar != 0:
-            for i in range(limit-1):
-                try:
-                    resp['recs']['ints']['3'].append(int(mostPopularItems[i]))
-                except:
-                    resp['recs']['ints']['3'].append(0)
-            resp['recs']['ints']['3'].append(int(most_similar))
-        else:
-            for i in range(limit):
-                try:
-                    resp['recs']['ints']['3'].append(int(mostPopularItems[i]))
-                except:
-                    resp['recs']['ints']['3'].append(0)
+        # choose the version of the response_handling -> how different results should be combined
+        version = 4
+        resp = response_handling.output(version, limit, mostPopularItems, user_user_result, item_item_result)
 
-
+    print(resp)
 
     return app.make_response(json.dumps(resp))
 
