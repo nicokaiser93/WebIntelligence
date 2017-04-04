@@ -1,3 +1,6 @@
+from statistics import mean
+
+from IPython.core.display import Math
 from flask import Flask, request
 
 import time
@@ -9,11 +12,17 @@ from collections import defaultdict
 import user_user_collaborative
 import response_handling
 import item_item_collaborative
+import matplotlib.pyplot as plt
+import numpy as np
 
 app = Flask(__name__)
 user_item = {}
 item_user = {}
 item_count = {}
+recent_popularity = {}
+test_list1 = []
+test_list2 = []
+test_list3 = [0]
 
 @app.route('/')
 def index():
@@ -41,14 +50,6 @@ def stop():
 
 @app.route('/', methods=['POST'])
 def recommend():
-
-    #TODO ACHTUNG ACHTUNG!! BITTE FOLGENDES BEACHTEN:
-    # habe 3 python files erstellt die am anfang importiert werden und damit etwas ausgelagert und versucht damit den
-    # Überblick zu behalten
-    # response_handling: bekommt alle Ergebnisse und man kann anhand der version entscheiden wie diese zu der resp
-    # kombiniert werden
-    # user_user_collaborative: der Name ist Programm --> gibt maximal 6 Artikel des ähnlichsten Users zurück
-    # item_item_collaborative: der Name ist Programm --> gibt die 6 ähnlichstens Items zurück
 
     #receiving and extracting  data
     recBody = json.loads(request.form.getlist('body')[0])
@@ -90,51 +91,86 @@ def recommend():
         itemID = recBody['id']
 
 
+
     #counts for each publisher how often item was "touched" (in event_notification, recommendation_request or item_update)
     item_count.setdefault(publisherID, defaultdict())
+    recent_popularity.setdefault(publisherID, defaultdict()) #set 1 for new item
+    try:
+        current_mean = mean(list(recent_popularity[publisherID].values()))
+    except:
+        current_mean = 0
+
+    try:
+        current_max = max(list(recent_popularity[publisherID].values()))
+    except:
+        current_max = 0
+
+    #starting_point = current_max * 0.1
+    starting_point = current_mean
     if itemID != 0:
         item_count[publisherID].setdefault(itemID, 0)
-        item_count[publisherID][itemID] = item_count[publisherID][itemID]+1
+        item_count[publisherID][itemID] = item_count[publisherID][itemID] + 1
+        if item_count[publisherID][itemID] == 1:
+            recent_popularity[publisherID][itemID] = starting_point
+        else:
+            recent_popularity[publisherID][itemID] = recent_popularity[publisherID][itemID] + 0.1
+
+
+    recent_popularity[publisherID] = {key: (recent_popularity[publisherID][key] - 0.1) for key in
+                                              recent_popularity[publisherID].keys()}
+    if publisherID == 35774:
+        try:
+            test_list1.append(recent_popularity[35774][246519047])
+        except:
+            test_list1.append(0)
+        try:
+            test_list2.append(recent_popularity[35774][257712455])
+        except:
+            test_list2.append(0)
+        try:
+            #test_list3.append(recent_popularity[35774][257643506])
+            test_list3.append(current_mean)
+        except:
+            test_list3.append(0)
+
+    # starting point --> mean + variable that says how much we like new articles
+    # derrivative --> smoothing --> width of window = how much we like new articles
 
     #returns sorted list of which items were most often touched
+    #try:
+        #mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get, reverse=True)
+    #except:
+        #mostPopularItems = []
+
     try:
-        mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get)
+        mostPopularItems = sorted(recent_popularity[publisherID], key=recent_popularity[publisherID].get, reverse=True)
     except:
         mostPopularItems = []
-
 
     ############################
     #building the rec-response
     ############################
 
-    ### thoughts: ###
-    # - time-dependant change of the response handling -> for example in the beginning user_user is useless but after
-    #   a lot of requests it could be useful
-    # - base everything on the mostPopularItems and connect the other two methods to a rating
-    #   --> for example an item that is in the top 10 of popularity AND top 6 of similarity could lead to better results
-    #       than an item that is "only" most popular or most similar
-    # - it is maybe not optimal to compute all the results from most_popular, user_user and item_item although we may
-    #   not use all of them in the response handling -> maybe call functions from the response handling
-    # - testing has to done --> by now i have no idea how to combine the results best although item_item seems to have
-    #   the most clicks for the small data set
-
     if (recType=="recommendation_request"):
 
         # get max 6 items from user_user collaborative filtering
         # (if userID = 0 he is treated as if he had only read the current item)
-        if not ((userID == 0) and (itemID == 0)):
-            user_user_result = user_user_collaborative.filtering(user_item[publisherID], userID, itemID)
+        if not ((userID == 0) or (itemID == 0)):
+            user_user_result = user_user_collaborative.filtering(user_item[publisherID], userID)
 
         # get the 6 most similar items
         if not(itemID == 0):
-            item_item_result = item_item_collaborative.filtering(item_user[publisherID], itemID)
+            item_item_result = item_item_collaborative.filtering(item_user[publisherID], itemID, userID, user_item[publisherID])
 
         # get the limit of how many items to recommend
         limit = recBody['limit']
         # choose the version of the response_handling -> how different results should be combined
-        version = 4
-        resp = response_handling.output(version, limit, mostPopularItems, user_user_result, item_item_result)
+        version = 1
+        resp = response_handling.output(version, limit, itemID, userID, mostPopularItems, user_user_result, item_item_result)
 
+    #print('user_user', user_user_result)
+    print('most_pop', mostPopularItems)
+    #print('item_item', item_item_result)
     print(resp)
 
     return app.make_response(json.dumps(resp))

@@ -1,4 +1,4 @@
-def filtering(item_user_publisher, itemID):
+def filtering(item_user_publisher, itemID, userID, user_item_publisher):
 # warning: I just swapped from user_item to item_user in the naming which could be confusing:
 # item_user is a dictionary with items as keys and users that have read this item as entry
 
@@ -23,16 +23,25 @@ def filtering(item_user_publisher, itemID):
                 if i in compared_item_users:
                     similarity_list[key] = similarity_list[key] + 1
 
-    most_similar_items = sorted(similarity_list, key=similarity_list.get)
+    most_similar_items = sorted(similarity_list, key=similarity_list.get, reverse=True)
+
 
     # return 6 user from this function (limit is usually smaller or equal 6)
     item_item_result = []
-    for i in range(6):
-        try:
-            item_item_result.append(list(most_similar_items)[i])
-        except:
-            item_item_result.append(0)
+    counter = 0
+    while len(item_item_result) < 6 and counter < len(list(most_similar_items)):
+        # only append result from item_item if user has not read it yet and similarity of that item is not zero
+        if not(list(most_similar_items)[counter] in user_item_publisher[userID]) \
+                and similarity_list[list(most_similar_items)[counter]] > 0:
+            try:
+                item_item_result.append(list(most_similar_items)[counter])
+            except:
+                item_item_result.append(0)
+            counter = counter +1
+        else:
+            counter = counter + 1
+
     try:
         return item_item_result
     except:
-        return [0]
+        return []
