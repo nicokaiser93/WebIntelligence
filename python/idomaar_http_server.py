@@ -1,3 +1,6 @@
+from statistics import mean
+
+from IPython.core.display import Math
 from flask import Flask, request
 
 import time
@@ -5,10 +8,24 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 from collections import defaultdict
+import math
+
+import user_user_collaborative
+import response_handling
+import item_item_collaborative
+import matplotlib.pyplot as plt
+import numpy as np
+import datetime
 
 app = Flask(__name__)
 user_item = {}
-item_count= {}
+item_user = {}
+item_count = {}
+item_timer = {}
+test_list1 = []
+test_list2 = []
+test_list3 = []
+test_time = []
 
 @app.route('/')
 def index():
@@ -33,12 +50,17 @@ def stop():
     print (user_item)
     return 'OK'
 
+
 @app.route('/', methods=['POST'])
 def recommend():
 
     #receiving and extracting  data
     recBody = json.loads(request.form.getlist('body')[0])
     recType = request.form.getlist('type')[0]
+
+    # initialization for collaborative filtering
+    user_user_result = [0]
+    item_item_result = [0]
 
     #extract information of each recommendation request or event notification (they have the same struture)
     if (recType!="item_update"):
@@ -57,50 +79,91 @@ def recommend():
         except:
             publisherID = 0
 
-        #print(recType+" user:"+str(userID)+" item:"+str(itemID)+" publisher:"+str(publisherID))
-        
         #saves for each publisher which user read which articles
         user_item.setdefault(publisherID, defaultdict(list))
         user_item[publisherID][userID].append(itemID)
-        #print(user_item)
+
+        # saves for each publisher which item was read by which userpl
+        item_user.setdefault(publisherID, defaultdict(list))
+        if itemID != 0:
+            item_user[publisherID][itemID].append(userID)
 
     #extract information of each item_update
     else:
         publisherID = recBody['domainid']
         itemID = recBody['id']
 
+    currentTime = recBody['timestamp']
+
 
     #counts for each publisher how often item was "touched" (in event_notification, recommendation_request or item_update)
     item_count.setdefault(publisherID, defaultdict())
-    item_count[publisherID].setdefault(itemID,0)
-    item_count[publisherID][itemID] = item_count[publisherID][itemID]+1
-    
-    #returns most popular item (which was most often "touched")
-    mostPopularItem = max(item_count[publisherID], key=item_count[publisherID].get)
+    item_timer.setdefault(publisherID, defaultdict()) #set 1 for new item
 
-    #returns sorted list of which items were most often touched
-    mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get)
+    if itemID != 0:
+        item_count[publisherID].setdefault(itemID, 0)
+        item_count[publisherID][itemID] = item_count[publisherID][itemID] + 1
+        item_timer[publisherID][itemID] = currentTime
+
+    factor = 50
+    norm_fromMiliToHours = 1000 * 60 * 60
+    for key in item_count[publisherID].keys():
+        timeSinceLastClick = currentTime - item_timer[publisherID][key]
+        item_count[publisherID][key] *= -(math.pow((timeSinceLastClick * factor)/norm_fromMiliToHours, 2)) + 1
+        if(item_count[publisherID][key] < 0):
+            item_count[publisherID][key] = 0
+
+
+    # if publisherID == 35774:
+    #      try:
+    #          test_list1.append(item_count[35774][246519047])
+    #      except:
+    #          test_list1.append(0)
+    #      try:
+    #          test_list2.append(item_count[35774][257712455])
+    #      except:
+    #          test_list2.append(0)
+    #      try:
+    #          test_list3.append(item_count[35774][257643506])
+    #      except:
+    #          test_list3.append(0)
+    #      test_time.append(currentTime)
+
+
+    try:
+        mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get, reverse=True)
+    except:
+        mostPopularItems = []
 
     ############################
     #building the rec-response
     ############################
-    resp = {}
 
     if (recType=="recommendation_request"):
-        resp['recs']={}
-        resp['recs']['ints']={}
-        resp['recs']['ints']['3']=[]
 
+        # get max 6 items from user_user collaborative filtering
+        # (if userID = 0 he is treated as if he had only read the current item)
+        if not ((userID == 0) or (itemID == 0)):
+            user_user_result = user_user_collaborative.filtering(user_item[publisherID], userID)
+
+        # get the 6 most similar items
+        if not(itemID == 0):
+            item_item_result = item_item_collaborative.filtering(item_user[publisherID], itemID, userID, user_item[publisherID])
+
+        # get the limit of how many items to recommend
         limit = recBody['limit']
-        for i in range(limit):
-            try:
-                resp['recs']['ints']['3'].append(int(mostPopularItems[i]))
-            except:
-                resp['recs']['ints']['3'].append(0)
+        # choose the version of the response_handling -> how different results should be combined
+        version = 1
 
-        print(resp)
+        resp = response_handling.output(version, limit, itemID, userID, mostPopularItems, user_user_result, item_item_result)
+
+    #print('user_user', user_user_result)
+    print('most_pop', mostPopularItems)
+    #print('item_item', item_item_result)
+    print(resp)
 
     return app.make_response(json.dumps(resp))
+
 
 if __name__ == '__main__':
     handler = RotatingFileHandler('http_flask_server.log', maxBytes=10000, backupCount=1)
