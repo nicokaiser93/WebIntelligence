@@ -139,7 +139,7 @@ def version4(limit, item_item_result):
     return resp
 
 def version5(limit, itemID, userID, mostPopularItems, user_user_result, item_item_result):
-# only item_item_collaborative filtering
+# merging
 
     # set up resp structure
     resp = {}
