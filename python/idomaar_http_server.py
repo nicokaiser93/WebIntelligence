@@ -1,6 +1,6 @@
-from statistics import mean
+# we ran this programm in anaconda python compiler and imported some things that would have been needed to be installed
+# for running it with the virtual machines
 
-from IPython.core.display import Math
 from flask import Flask, request
 
 import time
@@ -8,21 +8,22 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 from collections import defaultdict
+import math
 
 import user_user_collaborative
 import response_handling
 import item_item_collaborative
-import matplotlib.pyplot as plt
-import numpy as np
+
 
 app = Flask(__name__)
 user_item = {}
 item_user = {}
 item_count = {}
-recent_popularity = {}
+item_timer = {}
 test_list1 = []
 test_list2 = []
-test_list3 = [0]
+test_list3 = []
+test_time = []
 
 @app.route('/')
 def index():
@@ -80,7 +81,7 @@ def recommend():
         user_item.setdefault(publisherID, defaultdict(list))
         user_item[publisherID][userID].append(itemID)
 
-        # saves for each publisher which item was read by which user
+        # saves for each publisher which item was read by which userpl
         item_user.setdefault(publisherID, defaultdict(list))
         if itemID != 0:
             item_user[publisherID][itemID].append(userID)
@@ -90,60 +91,45 @@ def recommend():
         publisherID = recBody['domainid']
         itemID = recBody['id']
 
+    currentTime = recBody['timestamp']
 
 
     #counts for each publisher how often item was "touched" (in event_notification, recommendation_request or item_update)
     item_count.setdefault(publisherID, defaultdict())
-    recent_popularity.setdefault(publisherID, defaultdict()) #set 1 for new item
-    try:
-        current_mean = mean(list(recent_popularity[publisherID].values()))
-    except:
-        current_mean = 0
+    item_timer.setdefault(publisherID, defaultdict()) #set 1 for new item
 
-    try:
-        current_max = max(list(recent_popularity[publisherID].values()))
-    except:
-        current_max = 0
-
-    #starting_point = current_max * 0.1
-    starting_point = current_mean
     if itemID != 0:
         item_count[publisherID].setdefault(itemID, 0)
         item_count[publisherID][itemID] = item_count[publisherID][itemID] + 1
-        if item_count[publisherID][itemID] == 1:
-            recent_popularity[publisherID][itemID] = starting_point
-        else:
-            recent_popularity[publisherID][itemID] = recent_popularity[publisherID][itemID] + 0.1
+        item_timer[publisherID][itemID] = currentTime
 
+    factor = 50
+    norm_fromMiliToHours = 1000 * 60 * 60
+    for key in item_count[publisherID].keys():
+        timeSinceLastClick = currentTime - item_timer[publisherID][key]
+        item_count[publisherID][key] *= -(math.pow((timeSinceLastClick * factor)/norm_fromMiliToHours, 2)) + 1
+        if(item_count[publisherID][key] < 0):
+            item_count[publisherID][key] = 0
 
-    recent_popularity[publisherID] = {key: (recent_popularity[publisherID][key] - 0.1) for key in
-                                              recent_popularity[publisherID].keys()}
-    if publisherID == 35774:
-        try:
-            test_list1.append(recent_popularity[35774][246519047])
-        except:
-            test_list1.append(0)
-        try:
-            test_list2.append(recent_popularity[35774][257712455])
-        except:
-            test_list2.append(0)
-        try:
-            #test_list3.append(recent_popularity[35774][257643506])
-            test_list3.append(current_mean)
-        except:
-            test_list3.append(0)
+    # save some information to plot test data
+    # if publisherID == 35774:
+    #      try:
+    #          test_list1.append(item_count[35774][246519047])
+    #      except:
+    #          test_list1.append(0)
+    #      try:
+    #          test_list2.append(item_count[35774][257712455])
+    #      except:
+    #          test_list2.append(0)
+    #      try:
+    #          test_list3.append(item_count[35774][257643506])
+    #      except:
+    #          test_list3.append(0)
+    #      test_time.append(currentTime)
 
-    # starting point --> mean + variable that says how much we like new articles
-    # derrivative --> smoothing --> width of window = how much we like new articles
-
-    #returns sorted list of which items were most often touched
-    #try:
-        #mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get, reverse=True)
-    #except:
-        #mostPopularItems = []
 
     try:
-        mostPopularItems = sorted(recent_popularity[publisherID], key=recent_popularity[publisherID].get, reverse=True)
+        mostPopularItems = sorted(item_count[publisherID], key=item_count[publisherID].get, reverse=True)
     except:
         mostPopularItems = []
 
@@ -166,11 +152,9 @@ def recommend():
         limit = recBody['limit']
         # choose the version of the response_handling -> how different results should be combined
         version = 1
+
         resp = response_handling.output(version, limit, itemID, userID, mostPopularItems, user_user_result, item_item_result)
 
-    #print('user_user', user_user_result)
-    print('most_pop', mostPopularItems)
-    #print('item_item', item_item_result)
     print(resp)
 
     return app.make_response(json.dumps(resp))
